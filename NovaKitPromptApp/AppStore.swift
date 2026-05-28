@@ -6,40 +6,27 @@ final class AppStore: ObservableObject {
         didSet { save() }
     }
 
-    @Published var selectedID: UUID?
-    @Published var preferences = PromptPreferences() {
-        didSet { savePreferences() }
+    @Published var folders: [ConversationFolder] = [] {
+        didSet { save() }
     }
 
-    private let storageKey = "NovaKitPromptApp.conversations.v2"
+    @Published var selectedID: UUID?
+    @Published var showingArchived = false
+
+    private let storageKey = "NovaKitPromptApp.backupEnvelope.v2"
     private let legacyStorageKey = "NovaKitPromptApp.conversations.v1"
-    private let preferencesKey = "NovaKitPromptApp.preferences.v1"
 
     init() {
         loadPreferences()
         load()
         if conversations.isEmpty { createConversation() }
-        selectedID = activeConversations.first?.id ?? conversations.first?.id
+        selectedID = visibleConversations.first?.id ?? conversations.first?.id
     }
 
-    var activeConversations: [Conversation] {
-        conversations.filter { !$0.isArchived }
-    }
-
-    var archivedConversations: [Conversation] {
-        conversations.filter { $0.isArchived }
-    }
-
-    var folders: [String] {
-        Array(Set(conversations.map { $0.folderName.isEmpty ? "Inbox" : $0.folderName })).sorted()
-    }
-
-    var selectedConversation: Conversation? {
-        get { conversations.first(where: { $0.id == selectedID }) }
-        set {
-            guard let newValue, let index = conversations.firstIndex(where: { $0.id == newValue.id }) else { return }
-            conversations[index] = newValue
-        }
+    var visibleConversations: [Conversation] {
+        conversations
+            .filter { showingArchived ? $0.isArchived : !$0.isArchived }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     func createConversation(folderName: String = "Inbox") {
@@ -70,7 +57,7 @@ final class AppStore: ObservableObject {
 
     func delete(_ conversation: Conversation) {
         conversations.removeAll { $0.id == conversation.id }
-        if selectedID == conversation.id { selectedID = activeConversations.first?.id ?? conversations.first?.id }
+        if selectedID == conversation.id { selectedID = visibleConversations.first?.id ?? conversations.first?.id }
         if conversations.isEmpty { createConversation() }
     }
 
@@ -78,10 +65,10 @@ final class AppStore: ObservableObject {
         guard let idx = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
         conversations[idx].isArchived = true
         conversations[idx].updatedAt = Date()
-        if selectedID == conversation.id { selectedID = activeConversations.first?.id }
+        if selectedID == conversation.id { selectedID = visibleConversations.first?.id }
     }
 
-    func restore(_ conversation: Conversation) {
+    func unarchive(_ conversation: Conversation) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
         conversations[idx].isArchived = false
         conversations[idx].updatedAt = Date()
@@ -90,81 +77,41 @@ final class AppStore: ObservableObject {
 
     func update(_ conversation: Conversation) {
         guard let idx = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
-        var updated = conversation
-        updated.migrateIfNeeded()
+        var updated = BackupCodec.migrated(conversation)
         updated.updatedAt = Date()
         conversations[idx] = updated
     }
 
     func exportJSON() -> String {
-        let backup = ConversationBackup(conversations: conversations, promptPreferences: preferences)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(backup) else { return "{}" }
-        return String(data: data, encoding: .utf8) ?? "{}"
+        BackupCodec.export(conversations: conversations, folders: folders)
     }
 
     func importJSON(_ text: String) throws {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let data = text.data(using: .utf8) else { return }
-
-        if let backup = try? decoder.decode(ConversationBackup.self, from: data) {
-            conversations = backup.conversations.map { conversation in
-                var migrated = conversation
-                migrated.migrateIfNeeded()
-                return migrated
-            }
-            preferences = backup.promptPreferences
-        } else {
-            let imported = try decoder.decode([Conversation].self, from: data)
-            conversations = imported.map { conversation in
-                var migrated = conversation
-                migrated.migrateIfNeeded()
-                return migrated
-            }
-        }
-
-        selectedID = activeConversations.first?.id ?? conversations.first?.id
+        let imported = try BackupCodec.import(text)
+        conversations = imported.conversations
+        folders = imported.folders
+        selectedID = visibleConversations.first?.id ?? conversations.first?.id
         if conversations.isEmpty { createConversation() }
     }
 
     private func load() {
-        let data = UserDefaults.standard.data(forKey: storageKey) ?? UserDefaults.standard.data(forKey: legacyStorageKey)
-        guard let data else { return }
+        if let text = UserDefaults.standard.string(forKey: storageKey), let imported = try? BackupCodec.import(text) {
+            conversations = imported.conversations
+            folders = imported.folders
+            return
+        }
+
+        guard let data = UserDefaults.standard.data(forKey: legacyStorageKey) else { return }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-
-        if let backup = try? decoder.decode(ConversationBackup.self, from: data) {
-            conversations = backup.conversations.map { conversation in
-                var migrated = conversation
-                migrated.migrateIfNeeded()
-                return migrated
-            }
-            preferences = backup.promptPreferences
-        } else if let decoded = try? decoder.decode([Conversation].self, from: data) {
-            conversations = decoded.map { conversation in
-                var migrated = conversation
-                migrated.migrateIfNeeded()
-                return migrated
-            }
+        if let decoded = try? decoder.decode([Conversation].self, from: data) {
+            conversations = decoded.map(BackupCodec.migrated)
+            folders = []
         }
     }
 
     private func save() {
-        let backup = ConversationBackup(conversations: conversations, promptPreferences: preferences)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(backup) { UserDefaults.standard.set(data, forKey: storageKey) }
-    }
-
-    private func loadPreferences() {
-        guard let data = UserDefaults.standard.data(forKey: preferencesKey) else { return }
-        if let decoded = try? JSONDecoder().decode(PromptPreferences.self, from: data) { preferences = decoded }
-    }
-
-    private func savePreferences() {
-        if let data = try? JSONEncoder().encode(preferences) { UserDefaults.standard.set(data, forKey: preferencesKey) }
+        let text = BackupCodec.export(conversations: conversations, folders: folders)
+        UserDefaults.standard.set(text, forKey: storageKey)
     }
 }

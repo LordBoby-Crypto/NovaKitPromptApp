@@ -1,234 +1,159 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct ConversationView: View {
     @EnvironmentObject var store: AppStore
     @Binding var conversation: Conversation
-    @State private var starterGoal = ""
-    @State private var composerText = ""
-    @State private var optionalInstruction = ""
-    @State private var showingOptionalInstruction = false
+    @State private var aiResponse = ""
+    @State private var nextInstruction = ""
     @State private var pendingAttachments: [FileAttachment] = []
     @State private var showingFileImporter = false
-    @State private var showingStarterSheet = false
-    @State private var showingConversationSettings = false
+    @State private var showingStarter = false
+    @State private var showingSettings = false
     @State private var fileError: String?
     @State private var toastMessage: String?
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            LinearGradient(colors: [.black, Color(.systemGray6).opacity(0.18)], startPoint: .top, endPoint: .bottom)
+        ZStack {
+            LinearGradient(colors: [Color.black, Color.purple.opacity(0.15), Color.black], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                header
-                Divider().opacity(0.25)
-                timeline
-                composer
-            }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            conversationHeader
 
-            if let toastMessage {
-                Text(toastMessage)
-                    .font(.callout.bold())
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.thinMaterial, in: Capsule())
-                    .padding(.bottom, 122)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            if conversation.entries.isEmpty {
+                                welcomeCard
+                            } else {
+                                ForEach(conversation.entries) { entry in
+                                    ChatTurnView(entry: entry) { text in
+                                        copy(text)
+                                    }
+                                    .id(entry.id)
+                                }
+                            }
+                        }
+                        .padding(20)
+                    }
+                    .onChange(of: conversation.entries.count) { _ in
+                        if let last = conversation.entries.last?.id {
+                            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        }
+                    }
+                }
+                .accessibilityLabel("Attach files")
+
+                ComposerView(
+                    aiResponse: $aiResponse,
+                    nextInstruction: $nextInstruction,
+                    attachments: $pendingAttachments,
+                    attachAction: { showingFileImporter = true; Haptics.tap() },
+                    submitAction: submitAITurn
+                )
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
             }
         }
-        .navigationTitle("Nova Thread")
+        .navigationTitle("NovaKit Thread")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { showingStarterSheet = true } label: { Label("Starter", systemImage: "sparkles") }
+                Button { showingStarter = true; Haptics.tap() } label: { Image(systemName: "sparkles") }
                     .accessibilityLabel("Create starter prompt")
-                Button { showingConversationSettings = true } label: { Label("Settings", systemImage: "slider.horizontal.3") }
+                Button { showingSettings = true; Haptics.tap() } label: { Image(systemName: "slider.horizontal.3") }
                     .accessibilityLabel("Conversation settings")
             }
         }
-        .sheet(isPresented: $showingStarterSheet) { starterSheet }
-        .sheet(isPresented: $showingConversationSettings) { ConversationSettingsView(conversation: $conversation) }
         .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             do {
                 let urls = try result.get()
                 for url in urls { try importAttachment(url: url) }
-                showToast("Attached \(urls.count) file\(urls.count == 1 ? "" : "s")")
+                Haptics.success()
             } catch {
                 fileError = error.localizedDescription
-            }
-        }
-        .alert("File problem", isPresented: Binding(get: { fileError != nil }, set: { if !$0 { fileError = nil } })) {
-            Button("OK", role: .cancel) { fileError = nil }
-        } message: { Text(fileError ?? "") }
-        .onAppear { starterGoal = conversation.userGoal }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    TextField("Conversation title", text: $conversation.title)
-                        .font(.title2.bold())
-                        .accessibilityLabel("Conversation title")
-                    Text("\(conversation.folderName) • \(conversation.entries.count) saved messages")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Menu {
-                    Picker("Prompt Type", selection: $conversation.promptType) {
-                        ForEach(PromptType.allCases) { type in Text(type.rawValue).tag(type) }
-                    }
-                } label: {
-                    Label(conversation.promptType.rawValue, systemImage: "wand.and.stars")
-                        .labelStyle(.iconOnly)
-                        .font(.title3)
-                        .padding(10)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-                .accessibilityLabel("Prompt type")
-            }
-
-            if !conversation.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(conversation.tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption.bold())
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.accentColor.opacity(0.18), in: Capsule())
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.black.opacity(0.88))
-    }
-
-    private var timeline: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    if conversation.entries.isEmpty {
-                        EmptyThreadView { showingStarterSheet = true }
-                            .padding(.top, 40)
-                    } else {
-                        ForEach(conversation.entries) { entry in
-                            ChatEntryView(entry: entry, onCopy: copyToClipboard(_:), onToast: showToast(_:))
-                                .id(entry.id)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 18)
-            }
-            .onChange(of: conversation.entries.count) { _ in
-                if let last = conversation.entries.last?.id {
-                    withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                }
-            }
-        }
-    }
-
-    private var composer: some View {
-        VStack(spacing: 10) {
-            if !pendingAttachments.isEmpty {
-                AttachmentTray(attachments: $pendingAttachments)
-            }
-
-            if showingOptionalInstruction {
-                TextField("Optional direction for the next prompt", text: $optionalInstruction, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Optional next direction")
-            }
-
-            HStack(alignment: .bottom, spacing: 10) {
-                Button { showingFileImporter = true } label: {
-                    Image(systemName: "paperclip")
-                        .font(.title3)
-                        .frame(width: 42, height: 42)
-                        .background(.ultraThinMaterial, in: Circle())
-                }
-                .accessibilityLabel("Attach files")
-
-                TextField("Paste the AI response here…", text: $composerText, axis: .vertical)
-                    .lineLimit(2...7)
-                    .textFieldStyle(.plain)
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18))
-                    .accessibilityLabel("AI response")
-
-                Button { submitAIResponse() } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.headline)
-                        .frame(width: 42, height: 42)
-                        .foregroundStyle(.white)
-                        .background(canSubmit ? Color.accentColor : Color.gray, in: Circle())
-                }
-                .disabled(!canSubmit)
-                .accessibilityLabel("Submit AI response and generate NovaKit guidance")
-            }
-
-            Button {
-                withAnimation { showingOptionalInstruction.toggle() }
-                if !showingOptionalInstruction { optionalInstruction = "" }
-            } label: {
-                Label(showingOptionalInstruction ? "Hide optional instruction" : "Add optional next-step instruction", systemImage: "plus.bubble")
-                    .font(.caption)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Add optional next step instruction")
-        }
-        .padding(.horizontal)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(.regularMaterial)
-    }
-
-    private var starterSheet: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Start a cleaner NovaKit thread")
-                    .font(.title2.bold())
-                Text("This creates the first copy-ready prompt. After that, the main screen behaves like a chat timeline: paste each AI response, attach files, and NovaKit generates the next guidance message.")
-                    .foregroundStyle(.secondary)
-
-                TextEditor(text: $starterGoal)
-                    .frame(minHeight: 180)
-                    .padding(8)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-                    .accessibilityLabel("Starter goal")
-
-                Picker("Prompt Type", selection: $conversation.promptType) {
-                    ForEach(PromptType.allCases) { type in Text(type.rawValue).tag(type) }
-                }
-
-                Button {
-                    conversation.userGoal = starterGoal
-                    let prompt = PromptEngine.makeStarter(goal: starterGoal, type: conversation.promptType, preferences: store.preferences)
-                    saveEntry(role: .starterPrompt, title: "Starter Prompt", text: prompt, attachments: [], suggestedPrompt: prompt, summary: "Copy this into your AI to start the thread.")
-                    showingStarterSheet = false
-                    showToast("Starter prompt created")
-                } label: {
-                    Label("Create Starter Prompt", systemImage: "sparkles")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                Spacer()
+                Haptics.error()
             }
             .padding()
             .navigationTitle("Starter")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showingStarterSheet = false } } }
         }
+        .alert("File problem", isPresented: Binding(get: { fileError != nil }, set: { if !$0 { fileError = nil } })) {
+            Button("OK", role: .cancel) { fileError = nil }
+        } message: { Text(fileError ?? "") }
+        .overlay(alignment: .top) {
+            if let copiedMessage {
+                Text(copiedMessage)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showingStarter) {
+            StarterPromptSheet(conversation: $conversation) { text in copy(text) }
+        }
+        .sheet(isPresented: $showingSettings) {
+            ConversationSettingsSheet(conversation: $conversation)
+        }
+    }
+
+    private var conversationHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(conversation.title)
+                .font(.system(.largeTitle, design: .rounded).bold())
+                .foregroundStyle(.white)
+            Text("\(conversation.folderName) • \(conversation.promptType.rawValue)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if !conversation.tags.isEmpty {
+                FlowTags(tags: conversation.tags)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var welcomeCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("New NovaKit thread", systemImage: "sparkles")
+                .font(.headline)
+            Text("Use the sparkle button for the first starter prompt. After that, paste each AI answer in the bottom composer, attach any files, and submit it as the next chat turn.")
+                .foregroundStyle(.secondary)
+            Button("Create starter prompt") { showingStarter = true; Haptics.tap() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(18)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.08)))
+    }
+
+    private func submitAITurn() {
+        let clean = aiResponse.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty || !pendingAttachments.isEmpty else { return }
+
+        let responseText = clean.isEmpty ? "[No pasted text. Files were attached for this turn.]" : clean
+        saveEntry(role: .aiResponse, title: "AI Response", text: responseText, attachments: pendingAttachments)
+
+        let guidance = PromptEngine.makeGuidance(
+            conversation: conversation,
+            latestAIResponse: responseText,
+            attachments: pendingAttachments,
+            optionalInstruction: nextInstruction
+        )
+        saveEntry(role: .guidance, title: "NovaKit Guidance + Response Prompt", text: guidance.explanation + "\n\n--- NEXT PROMPT ---\n" + guidance.responsePrompt, attachments: pendingAttachments)
+
+        aiResponse = ""
+        nextInstruction = ""
+        pendingAttachments.removeAll()
+        Haptics.success()
     }
 
     private var canSubmit: Bool {
@@ -270,121 +195,222 @@ struct ConversationView: View {
         pendingAttachments.append(FileAttachment(name: url.lastPathComponent, sizeBytes: data.count, textPreview: capped))
     }
 
-    private func copyToClipboard(_ text: String) {
+    private func copy(_ text: String) {
+#if canImport(UIKit)
         UIPasteboard.general.string = text
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        showToast("Copied")
-    }
-
-    private func showToast(_ message: String) {
-        withAnimation { toastMessage = message }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
-            withAnimation { if toastMessage == message { toastMessage = nil } }
+#endif
+        Haptics.success()
+        withAnimation { copiedMessage = "Copied" }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+            withAnimation { copiedMessage = nil }
         }
     }
 }
 
-struct EmptyThreadView: View {
-    var startAction: () -> Void
+struct ComposerView: View {
+    @Binding var aiResponse: String
+    @Binding var nextInstruction: String
+    @Binding var attachments: [FileAttachment]
+    var attachAction: () -> Void
+    var submitAction: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "sparkles.rectangle.stack")
-                .font(.system(size: 52))
-                .foregroundStyle(.blue)
-            Text("No prompt history yet")
-                .font(.title2.bold())
-            Text("Create a starter prompt, then paste each AI response at the bottom. NovaKit will keep the thread history and suggest the next prompt for you.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            Button("Create Starter Prompt", action: startAction)
-                .buttonStyle(.borderedProminent)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Paste the AI reply")
+                .font(.headline)
+            TextEditor(text: $aiResponse)
+                .frame(minHeight: 92, maxHeight: 140)
+                .padding(6)
+                .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.10)))
+                .accessibilityLabel("AI response text")
+
+            DisclosureGroup("Optional instruction") {
+                TextEditor(text: $nextInstruction)
+                    .frame(minHeight: 54, maxHeight: 90)
+                    .padding(6)
+                    .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("Optional next instruction")
+            }
+            .font(.callout)
+
+            if !attachments.isEmpty { AttachmentStrip(attachments: $attachments) }
+
+            HStack {
+                Button { attachAction() } label: { Label("Files", systemImage: "paperclip") }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Attach files")
+                Spacer()
+                Button { submitAction() } label: { Label("Submit Turn", systemImage: "arrow.up.circle.fill") }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(aiResponse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty)
+                    .accessibilityLabel("Submit AI response turn")
+            }
         }
-        .padding(28)
-        .frame(maxWidth: .infinity)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28))
-        .accessibilityElement(children: .combine)
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.08)))
     }
 }
 
-struct ChatEntryView: View {
-    var entry: ConversationEntry
-    var onCopy: (String) -> Void
-    var onToast: (String) -> Void
+struct ChatTurnView: View {
+    let entry: ConversationEntry
+    var copyAction: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
-            if isUserEntry { Spacer(minLength: 36) }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Label(entry.title, systemImage: iconName)
+                    .font(.headline)
+                Spacer()
+                Text(entry.createdAt, style: .time)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label(entry.title, systemImage: iconName)
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(entry.createdAt, style: .time)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+            Text(entry.text)
+                .font(.system(.callout, design: entry.role == .guidance || entry.role == .starterPrompt ? .monospaced : .default))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .lineLimit(entry.role == .aiResponse ? 10 : nil)
 
-                if let summary = entry.summary, !summary.isEmpty {
-                    Text(summary)
-                        .font(.callout)
-                } else {
-                    Text(entry.text)
-                        .font(.callout)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                }
-
-                if !entry.attachments.isEmpty {
-                    AttachmentPreviewGrid(attachments: entry.attachments)
-                }
-
-                if let suggestedPrompt = entry.suggestedPrompt, !suggestedPrompt.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Copy-ready NovaKit prompt")
-                            .font(.caption.bold())
+            if !entry.attachments.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(entry.attachments) { attachment in
+                        Label("\(attachment.name) • \(attachment.sizeBytes) bytes", systemImage: "doc.text")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(suggestedPrompt)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(8)
-                            .textSelection(.enabled)
-                            .padding(10)
-                            .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-
-                HStack {
-                    Button { onCopy(entry.suggestedPrompt ?? entry.text) } label: { Label("Copy", systemImage: "doc.on.doc") }
-                    ShareLink(item: entry.suggestedPrompt ?? entry.text) { Label("Share", systemImage: "square.and.arrow.up") }
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
-            .padding(14)
-            .frame(maxWidth: 620, alignment: .leading)
-            .background(bubbleColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .accessibilityElement(children: .contain)
 
-            if !isUserEntry { Spacer(minLength: 36) }
+            HStack {
+                Button { copyAction(entry.text) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    .buttonStyle(.bordered)
+                ShareLink(item: entry.text) { Label("Share", systemImage: "square.and.arrow.up") }
+                    .buttonStyle(.bordered)
+            }
+            .font(.caption)
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(backgroundStyle, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.08)))
+        .accessibilityElement(children: .combine)
     }
 
-    private var isUserEntry: Bool { entry.role == .aiResponse }
-    private var bubbleColor: Color { isUserEntry ? Color.accentColor.opacity(0.28) : Color(.secondarySystemBackground) }
     private var iconName: String {
         switch entry.role {
         case .starterPrompt: return "sparkles"
-        case .aiResponse: return "person.crop.circle"
-        case .followUpPrompt: return "arrowshape.turn.up.right"
-        case .novaGuidance: return "wand.and.stars"
+        case .aiResponse: return "bubble.left.fill"
+        case .followUpPrompt: return "arrowshape.turn.up.right.fill"
+        case .guidance: return "wand.and.stars"
+        }
+    }
+
+    private var backgroundStyle: AnyShapeStyle {
+        switch entry.role {
+        case .aiResponse: return AnyShapeStyle(.ultraThinMaterial)
+        case .guidance: return AnyShapeStyle(Color.blue.opacity(0.18))
+        case .starterPrompt, .followUpPrompt: return AnyShapeStyle(Color.purple.opacity(0.16))
         }
     }
 }
 
-struct AttachmentTray: View {
+struct StarterPromptSheet: View {
+    @Binding var conversation: Conversation
+    var copyAction: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var draftGoal = ""
+    @State private var generated = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("What should Nova help with first?") {
+                    TextEditor(text: $draftGoal)
+                        .frame(minHeight: 140)
+                        .accessibilityLabel("Starter goal")
+                    Picker("Prompt type", selection: $conversation.promptType) {
+                        ForEach(PromptType.allCases) { type in Text(type.rawValue).tag(type) }
+                    }
+                }
+
+                Section {
+                    Button("Generate Starter Prompt") {
+                        conversation.userGoal = draftGoal
+                        generated = PromptEngine.makeStarter(goal: draftGoal, type: conversation.promptType, config: conversation.templateConfig)
+                        conversation.entries.append(ConversationEntry(role: .starterPrompt, title: "Starter Prompt", text: generated))
+                        conversation.updatedAt = Date()
+                        Haptics.success()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if !generated.isEmpty {
+                    Section("Generated") {
+                        Text(generated)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                        Button("Copy Prompt") { copyAction(generated) }
+                        ShareLink(item: generated) { Label("Share Prompt", systemImage: "square.and.arrow.up") }
+                    }
+                }
+            }
+            .navigationTitle("Starter Prompt")
+            .toolbar { Button("Done") { dismiss() } }
+            .onAppear { draftGoal = conversation.userGoal }
+        }
+    }
+}
+
+struct ConversationSettingsSheet: View {
+    @Binding var conversation: Conversation
+    @Environment(\.dismiss) private var dismiss
+    @State private var tagText = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Conversation") {
+                    TextField("Title", text: $conversation.title)
+                    TextField("Folder", text: $conversation.folderName)
+                    Picker("Prompt Type", selection: $conversation.promptType) {
+                        ForEach(PromptType.allCases) { type in Text(type.rawValue).tag(type) }
+                    }
+                    Toggle("Archived", isOn: $conversation.isArchived)
+                }
+
+                Section("Tags") {
+                    TextField("Comma separated tags", text: $tagText)
+                        .textInputAutocapitalization(.never)
+                    FlowTags(tags: conversation.tags)
+                }
+
+                Section("Prompt Template") {
+                    Toggle("NovaKit header", isOn: $conversation.templateConfig.includeNovaKitHeader)
+                    Toggle("Response Reviewer", isOn: $conversation.templateConfig.includeResponseReviewer)
+                    Toggle("Constraints Analysis", isOn: $conversation.templateConfig.includeConstraintsAnalysis)
+                    Toggle("Minecraft defaults", isOn: $conversation.templateConfig.preferMinecraftDefaults)
+                    Stepper("History turns: \(conversation.templateConfig.maxHistoryEntries)", value: $conversation.templateConfig.maxHistoryEntries, in: 1...20)
+                }
+            }
+            .navigationTitle("Thread Settings")
+            .toolbar { Button("Done") { applyTags(); dismiss() } }
+            .onAppear { tagText = conversation.tags.joined(separator: ", ") }
+        }
+    }
+
+    private func applyTags() {
+        conversation.tags = tagText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        conversation.updatedAt = Date()
+    }
+}
+
+struct AttachmentStrip: View {
     @Binding var attachments: [FileAttachment]
 
     var body: some View {
@@ -392,69 +418,35 @@ struct AttachmentTray: View {
             HStack(spacing: 8) {
                 ForEach(attachments) { attachment in
                     HStack(spacing: 6) {
-                        Image(systemName: attachment.isLikelyText ? "doc.text" : "doc")
-                        Text(attachment.name).lineLimit(1)
+                        Image(systemName: "doc.text")
+                        VStack(alignment: .leading) {
+                            Text(attachment.name).lineLimit(1)
+                            Text("\(attachment.sizeBytes) bytes").font(.caption2).foregroundStyle(.secondary)
+                        }
                         Button { attachments.removeAll { $0.id == attachment.id } } label: { Image(systemName: "xmark.circle.fill") }
+                            .accessibilityLabel("Remove \(attachment.name)")
                     }
                     .font(.caption)
+                    .padding(8)
+                    .background(.thinMaterial, in: Capsule())
+                }
+            }
+        }
+    }
+}
+
+struct FlowTags: View {
+    let tags: [String]
+
+    var body: some View {
+        HStack {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.caption.bold())
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
+                    .padding(.vertical, 5)
+                    .background(Color.blue.opacity(0.18), in: Capsule())
             }
-        }
-    }
-}
-
-struct AttachmentPreviewGrid: View {
-    var attachments: [FileAttachment]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(attachments) { attachment in
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(attachment.name, systemImage: attachment.isLikelyText ? "doc.text" : "doc")
-                        .font(.caption.bold())
-                    Text("\(attachment.sizeBytes) bytes")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(attachment.textPreview)
-                        .font(.caption2.monospaced())
-                        .lineLimit(3)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-    }
-}
-
-struct ConversationSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var conversation: Conversation
-    @State private var tagsText = ""
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Organization") {
-                    TextField("Folder", text: $conversation.folderName)
-                    TextField("Tags separated by commas", text: $tagsText)
-                        .onSubmit { applyTags() }
-                    Toggle("Archived", isOn: $conversation.isArchived)
-                }
-
-                Section("Prompt Mode") {
-                    Picker("Prompt Type", selection: $conversation.promptType) {
-                        ForEach(PromptType.allCases) { type in Text(type.rawValue).tag(type) }
-                    }
-                }
-            }
-            .navigationTitle("Thread Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { applyTags(); dismiss() } } }
-            .onAppear { tagsText = conversation.tags.joined(separator: ", ") }
         }
     }
 

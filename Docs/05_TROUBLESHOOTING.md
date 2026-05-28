@@ -41,6 +41,34 @@ Most likely causes:
 - `ASC_PRIVATE_KEY` missing BEGIN/END PRIVATE KEY lines.
 - API key lacks App Manager/Admin access.
 
+
+## TestFlight upload says bundle version must be higher than previously uploaded version
+
+This means App Store Connect received an IPA whose `CFBundleVersion` was not higher than the previous uploaded build.
+
+The TestFlight workflow now avoids `agvtool` and writes a UTC timestamp build number directly into `NovaKitPromptApp/Info.plist` before Fastlane builds the IPA.
+
+What to do:
+
+1. Pull or upload the latest repo changes.
+2. Run **Build and Upload to TestFlight** again.
+3. Confirm the Fastlane log prints a line like `Using CFBundleShortVersionString=1.0 and CFBundleVersion=20260528225345`.
+4. If it still fails, make sure the new `CFBundleVersion` number in the log is greater than the newest build number listed in App Store Connect -> TestFlight.
+
+
+## TestFlight upload says SDK version issue / iOS 26 SDK required
+
+This means GitHub Actions built the app with an older Xcode/iOS SDK, such as Xcode 16.4 with the iOS 18.5 SDK, and App Store Connect rejected the IPA.
+
+The TestFlight workflow now runs on `macos-26`, selects an installed `Xcode_26*.app`, prints `xcodebuild -version` and available SDKs, and fails early if Xcode 26 is not selected.
+
+What to do:
+
+1. Pull or upload the latest repo changes.
+2. Run **Build and Upload to TestFlight** again.
+3. In the **Select Xcode 26** log step, confirm it prints `Xcode 26...`.
+4. If GitHub says `macos-26` is unavailable, wait and rerun later or check GitHub-hosted runner availability.
+
 ## TestFlight build uploaded but not visible yet
 
 Wait. Apple processes builds after upload. It can take a while.

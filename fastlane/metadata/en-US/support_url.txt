@@ -1,1 +1,1 @@
-https://example.com/support
+Use your own support page, GitHub repo URL, or placeholder during private TestFlight.

@@ -1,21 +1,24 @@
 import Foundation
 
+struct PromptGuidance: Equatable {
+    var explanation: String
+    var responsePrompt: String
+    var inferredType: PromptType
+}
+
 enum PromptEngine {
-    static func makeStarter(goal: String, type: PromptType, preferences: PromptPreferences = PromptPreferences()) -> String {
-        let cleanGoal = normalized(goal, fallback: "Help me turn this into a clear, useful next step.")
+    static func makeStarter(goal: String, type: PromptType, config: PromptTemplateConfig = .default) -> String {
+        let cleanGoal = cleaned(goal, fallback: "Help me define the next useful NovaKit task.")
         let selected = type == .auto ? inferType(from: cleanGoal) : type
-        let template = PromptTemplate.builtIns.first { $0.id == preferences.preferredTemplateID }
+        let utilities = utilityBlock(config: config)
 
         switch selected {
         case .minecraftPluginPlan:
-            return baseHeader(task: cleanGoal, template: template) + """
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
 
-Use the NovaKit v3.1 utilities as needed, especially:
-- Spechammer / Architect's Anvil for turning the idea into a practical design brief.
-- Constraints Analysis Procedure for limits, risks, dependencies, and tradeoffs.
-- Response Reviewer before final output.
+\(utilities)
 
 Create a practical plan sheet for building this Minecraft plugin:
 
@@ -37,11 +40,13 @@ The output must include:
 Do not write code yet unless code is specifically requested. Make the plan clear enough that a developer can build from it.
 """
         case .codeReview:
-            return baseHeader(task: cleanGoal, template: template) + """
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
 
-Review the supplied code, files, or plugin idea with hard-nosed realism. Use Response Reviewer before final output.
+\(utilities)
+
+Review the supplied code, files, or plugin idea with hard-nosed realism.
 
 Goal:
 \(cleanGoal)
@@ -55,9 +60,11 @@ Return:
 6. A short next-action checklist.
 """
         case .featureExpansion:
-            return baseHeader(task: cleanGoal, template: template) + """
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
+
+\(utilities)
 
 Use Spechammer and Constraints Analysis to expand this into a clean feature design:
 \(cleanGoal)
@@ -65,57 +72,71 @@ Use Spechammer and Constraints Analysis to expand this into a clean feature desi
 Return a structured implementation brief with feature scope, user flow, config needs, commands, permissions, data model, edge cases, and build phases.
 """
         case .bugFix:
-            return baseHeader(task: cleanGoal, template: template) + """
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
+
+\(utilities)
 
 Analyze this bug or issue:
 \(cleanGoal)
 
-Return likely causes, what evidence is needed, how to reproduce, exact fixes to try, what files/logs should be inspected next, and how to verify the fix.
+Return likely causes, evidence needed, reproduction steps, exact fixes to try, files/logs to inspect next, and a verification checklist.
 """
-        case .projectPlan:
-            return baseHeader(task: cleanGoal, template: template) + """
+        case .releasePlan:
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
 
-Turn this into an implementation-ready project plan:
+\(utilities)
+
+Create an update/release plan for:
 \(cleanGoal)
 
-Use Constraints Analysis, Spechammer, and Response Reviewer. Return scope, milestones, file/module plan, commands, risks, acceptance criteria, and a short first-pass task list.
+Include versioning, migration risks, build commands, signing/distribution steps, rollback plan, user-facing release notes, and post-release checks.
 """
-        case .researchBrief:
-            return baseHeader(task: cleanGoal, template: template) + """
+        case .appStorePrep:
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
 
-Create a research brief for:
+\(utilities)
+
+Prepare this iOS app/TestFlight/App Store task:
 \(cleanGoal)
 
-Separate known facts, assumptions, open questions, sources needed, likely failure modes, and a copy-ready research prompt for the next AI pass.
+Return metadata, signing requirements, privacy notes, screenshots/assets needed, GitHub Actions/Fastlane checks, and exact next setup actions.
 """
-        case .appUpgrade:
-            return baseHeader(task: cleanGoal, template: template) + """
+        case .architecturePlan:
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
 
-Create an app upgrade plan for:
+\(utilities)
+
+Create an architecture plan for:
 \(cleanGoal)
 
-Return:
-1. Product/design diagnosis.
-2. Better user flow.
-3. Data model changes.
-4. UI screens/components.
-5. Build/release/update strategy.
-6. Tests to add.
-7. Migration risks.
-8. A copy-ready implementation prompt.
+Include modules, data flow, persistence, UI flow, test strategy, migration strategy, risks, and build phases.
+"""
+        case .fileExplanation:
+            return baseHeader(task: cleanGoal, config: config) + """
+
+Run NovaKit v3.1 as Nova.
+
+\(utilities)
+
+Explain the supplied AI-created files and response for this task:
+\(cleanGoal)
+
+Return what each file likely does, how they work together, what to copy/use next, and the safest next prompt to send.
 """
         case .general, .auto:
-            return baseHeader(task: cleanGoal, template: template) + """
+            return baseHeader(task: cleanGoal, config: config) + """
 
 Run NovaKit v3.1 as Nova.
+
+\(utilities)
 
 Turn this request into the strongest useful output:
 \(cleanGoal)
@@ -125,82 +146,73 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
         }
     }
 
-    static func makeAIResponseGuidance(conversation: Conversation, latestAIResponse: String, attachments: [FileAttachment], preferences: PromptPreferences = PromptPreferences()) -> (summary: String, suggestedPrompt: String, fullText: String) {
-        let cleanResponse = normalized(latestAIResponse, fallback: "No pasted AI response was provided.")
-        let attachmentSummary = summarizeAttachments(attachments)
-        let recentContext = conversation.entries.suffix(preferences.maxHistoryEntries).map { entry in
-            "## \(entry.role.rawValue) - \(entry.title)\n\(truncate(entry.text, max: 2500))"
+    static func makeGuidance(conversation: Conversation, latestAIResponse: String, attachments: [FileAttachment], optionalInstruction: String = "") -> PromptGuidance {
+        let cleanResponse = cleaned(latestAIResponse, fallback: "No pasted AI response was provided.")
+        let cleanInstruction = optionalInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inferred = conversation.promptType == .auto ? inferType(from: conversation.userGoal + "\n" + cleanResponse + "\n" + attachments.map(\.name).joined(separator: " ")) : conversation.promptType
+        let config = conversation.templateConfig
+        let historyLimit = max(1, config.maxHistoryEntries)
+        let historyMax = max(500, config.maxHistoryCharacters)
+        let attachmentMax = max(1_000, config.maxAttachmentCharacters)
+
+        let previousPrompts = conversation.entries.suffix(historyLimit).map { entry in
+            "## \(entry.role.rawValue) - \(entry.title)\n\(truncate(entry.text, max: historyMax))"
         }.joined(separator: "\n\n")
 
-        let summary = """
-I saved the AI response and \(attachments.count) attachment\(attachments.count == 1 ? "" : "s"). \(attachmentSummary.shortExplanation)
-""".trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachmentBlock = attachments.isEmpty ? "No files were attached." : attachments.map { file in
+            """
+            ### Attached file: \(file.name)
+            Size: \(file.sizeBytes) bytes
+            Captured text:
+            \(truncate(file.textPreview, max: attachmentMax))
+            """
+        }.joined(separator: "\n\n")
 
-        let suggestedPrompt = """
-Run NovaKit v3.1 as Nova.
+        let explanation = makeLocalExplanation(response: cleanResponse, attachments: attachments, inferredType: inferred)
+        let utilities = utilityBlock(config: config)
+        let responsePrompt = """
+        Run NovaKit v3.1 as Nova.
 
 Continue this exact work thread using the pasted AI response and attached file context below. First explain what the AI response and files mean in practical terms, then produce the best next response or implementation step.
 
-# Current project goal
-\(normalized(conversation.userGoal, fallback: conversation.title))
+        \(utilities)
+
+        # My next instruction
+        \(cleanInstruction.isEmpty ? "Explain what the AI response and attached files mean, identify what I should use next, and produce the best next response prompt/output." : cleanInstruction)
+
+        # Conversation goal
+        \(cleaned(conversation.userGoal, fallback: conversation.title))
 
 # Recent saved history
 \(recentContext.isEmpty ? "No prior saved history." : recentContext)
 
-# AI response I received
-\(truncate(cleanResponse, max: 12000))
+        # AI response I received
+        \(cleanResponse)
 
 # Attached files and captured content
 \(attachmentSummary.promptBlock)
 
-# Required NovaKit behavior
-- Use Response Reviewer before final output.
-- Explain what changed, what the files are for, and what I should do next.
-- If files are code/config, treat them as source context and call out contradictions.
-- If anything is missing, list the exact missing files or details.
-- End with one copy-ready prompt or action block I can use next.
-"""
-
-        let fullText = """
-## What this AI response means
-\(plainLanguageExplanation(cleanResponse, attachments: attachments))
-
-## Attachment readout
-\(attachmentSummary.longExplanation)
-
-## Recommended NovaKit response prompt
-\(suggestedPrompt)
-"""
-
-        return (summary, suggestedPrompt, fullText)
-    }
-
-    static func makeFollowUp(conversation: Conversation, newInstruction: String, latestAIResponse: String, attachments: [FileAttachment], preferences: PromptPreferences = PromptPreferences()) -> String {
-        let guidance = makeAIResponseGuidance(conversation: conversation, latestAIResponse: latestAIResponse, attachments: attachments, preferences: preferences)
-        let cleanInstruction = newInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !cleanInstruction.isEmpty else { return guidance.suggestedPrompt }
-
-        return guidance.suggestedPrompt + """
-
-# Extra instruction from me
-\(cleanInstruction)
-"""
-    }
-
-    private static func baseHeader(task: String, template: PromptTemplate?) -> String {
+        # Required behavior
+        - Explain what changed and what the attached files appear to mean.
+        - Tell me exactly what to copy, save, run, or ask next.
+        - Base the response on both the pasted AI response and the attached files.
+        - If code/config files are attached, inspect them as actual source context.
+        - Point out contradictions between the response and the files.
+        - If files are missing, say exactly what is missing.
+        - End with one polished next prompt I can send back if another round is needed.
+        \(config.preferMinecraftDefaults ? "- If continuing a Minecraft plugin task, prefer Java 21, Paper API, Maven, Lombok, and Oraxen-aware design when relevant." : "")
         """
-# NovaKit v3.1 Prompt
-You are receiving a user request that should be handled with NovaKit v3.1 behavior.
-User request: \(task)
-Preferred template: \(template?.name ?? "Auto")
-Template note: \(template?.instructions ?? "Infer the best NovaKit utility for the job.")
-"""
+
+        return PromptGuidance(explanation: explanation, responsePrompt: responsePrompt, inferredType: inferred)
     }
 
-    private static func inferType(from text: String) -> PromptType {
+    static func inferType(from text: String) -> PromptType {
         let lower = text.lowercased()
+        if lower.contains("testflight") || lower.contains("app store") || lower.contains("fastlane") || lower.contains("signing") { return .appStorePrep }
+        if lower.contains("release") || lower.contains("update") || lower.contains("upgrade") || lower.contains("version") { return .releasePlan }
+        if lower.contains("architecture") || lower.contains("data model") || lower.contains("schema") || lower.contains("migration") { return .architecturePlan }
         if lower.contains("minecraft") || lower.contains("paper plugin") || lower.contains("plugin") { return .minecraftPluginPlan }
+        if lower.contains("attach") || lower.contains("file") || lower.contains("explain") { return .fileExplanation }
         if lower.contains("bug") || lower.contains("error") || lower.contains("crash") || lower.contains("fix") { return .bugFix }
         if lower.contains("review") || lower.contains("check") { return .codeReview }
         if lower.contains("research") || lower.contains("source") || lower.contains("investigate") { return .researchBrief }
@@ -210,55 +222,52 @@ Template note: \(template?.instructions ?? "Infer the best NovaKit utility for t
         return .general
     }
 
-    private static func summarizeAttachments(_ attachments: [FileAttachment]) -> (shortExplanation: String, longExplanation: String, promptBlock: String) {
-        guard !attachments.isEmpty else {
-            return (
-                "No files were attached, so the next prompt focuses on the pasted response and conversation history.",
-                "No attachments were submitted with this step.",
-                "No files were attached."
-            )
-        }
-
-        let rows = attachments.map { file in
-            let type = file.isLikelyText ? "text captured" : "binary/unsupported preview"
-            return "- \(file.name) (\(file.sizeBytes) bytes, \(type))"
-        }.joined(separator: "\n")
-
-        let promptBlock = attachments.map { file in
-            """
-### Attached file: \(file.name)
-Size: \(file.sizeBytes) bytes
-Captured text:
-\(truncate(file.textPreview, max: 12000))
-"""
-        }.joined(separator: "\n\n")
-
-        return (
-            "I found these files: \(attachments.map(\.name).joined(separator: ", ")).",
-            rows,
-            promptBlock
-        )
-    }
-
-    private static func plainLanguageExplanation(_ response: String, attachments: [FileAttachment]) -> String {
-        let responseLength = response.trimmingCharacters(in: .whitespacesAndNewlines).count
-        var parts: [String] = []
-        if responseLength == 0 {
-            parts.append("There was no pasted AI response to analyze, so this step depends mainly on attachments and prior context.")
-        } else {
-            parts.append("The pasted AI response has been stored as part of this conversation. The next NovaKit prompt should ask Nova to verify the response, connect it to the files, and turn it into the next concrete action.")
-        }
-
+    private static func makeLocalExplanation(response: String, attachments: [FileAttachment], inferredType: PromptType) -> String {
+        let attachmentSummary: String
         if attachments.isEmpty {
-            parts.append("No files were attached, so there is no file evidence for Nova to inspect yet.")
+            attachmentSummary = "No files are attached for this turn. The next prompt will rely on the pasted AI response and saved conversation history."
         } else {
-            parts.append("The attached files should be treated as source evidence, not just notes. Nova should explain what each file is for and whether the pasted response matches the file contents.")
+            let fileLines = attachments.map { file in
+                "- \(file.name) (\(file.sizeBytes) bytes): \(file.textPreview.isEmpty ? "No readable preview captured." : "Readable text preview captured for NovaKit context.")"
+            }.joined(separator: "\n")
+            attachmentSummary = "Attached files captured for the next NovaKit round:\n\(fileLines)"
         }
 
-        return parts.joined(separator: " ")
+        return """
+        Saved this AI turn and prepared a NovaKit-ready response prompt.
+
+        Detected mode: \(inferredType.rawValue)
+        Response captured: \(response.count) characters
+
+        \(attachmentSummary)
+
+        What to do next:
+        1. Review the generated NovaKit response prompt below.
+        2. Copy or share it into your AI chat.
+        3. Paste the next AI answer back here with any new files it creates.
+
+        This keeps the workflow like a chat history instead of making you reuse separate starter/response/follow-up boxes.
+        """
     }
 
-    private static func normalized(_ text: String, fallback: String) -> String {
+    private static func baseHeader(task: String, config: PromptTemplateConfig) -> String {
+        guard config.includeNovaKitHeader else { return "User request: \(task)" }
+        return """
+        # NovaKit v3.1 Prompt
+        You are receiving a user request that should be handled with NovaKit v3.1 behavior.
+        User request: \(task)
+        """
+    }
+
+    private static func utilityBlock(config: PromptTemplateConfig) -> String {
+        var lines = ["Use the NovaKit v3.1 utilities as needed."]
+        if config.includeConstraintsAnalysis { lines.append("- Use Constraints Analysis for limits, risks, dependencies, and tradeoffs.") }
+        if config.includeResponseReviewer { lines.append("- Use Response Reviewer before final output.") }
+        lines.append("- Prefer direct, practical output with clear next actions.")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func cleaned(_ text: String, fallback: String) -> String {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return clean.isEmpty ? fallback : clean
     }

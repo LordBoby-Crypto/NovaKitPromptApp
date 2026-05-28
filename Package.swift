@@ -11,8 +11,14 @@ let package = Package(
         .target(
             name: "NovaKitPromptAppCore",
             path: "NovaKitPromptApp",
-            exclude: ["AppStore.swift", "ConversationListView.swift", "ConversationView.swift", "Info.plist", "NovaKitPromptApp.swift", "Assets.xcassets"],
-            sources: ["Models.swift", "PromptEngine.swift"]
+            exclude: [
+                "AppStore.swift",
+                "ConversationListView.swift",
+                "ConversationView.swift",
+                "NovaKitPromptApp.swift",
+                "Info.plist",
+                "Assets.xcassets"
+            ]
         ),
         .testTarget(
             name: "NovaKitPromptAppTests",

@@ -2,60 +2,26 @@ import XCTest
 @testable import NovaKitPromptAppCore
 
 final class PromptEngineTests: XCTestCase {
-    func testAutoDetectsAppUpgradePrompt() {
-        let prompt = PromptEngine.makeStarter(goal: "Upgrade this iOS app UI and TestFlight release flow", type: .auto)
-
-        XCTAssertTrue(prompt.contains("app upgrade plan"))
-        XCTAssertTrue(prompt.contains("Build/release/update strategy"))
+    func testAutoDetectsAppStorePrep() {
+        let prompt = PromptEngine.makeStarter(goal: "Fix TestFlight signing and Fastlane upload", type: .auto)
+        XCTAssertTrue(prompt.contains("App Store"))
+        XCTAssertTrue(prompt.contains("Fastlane"))
     }
 
-    func testGuidanceIncludesAttachmentsAndCopyReadyPrompt() {
-        let attachment = FileAttachment(name: "Config.swift", sizeBytes: 42, textPreview: "let value = true")
-        let conversation = Conversation(title: "Upgrade thread", userGoal: "Improve the app")
+    func testGuidanceIncludesAttachmentsAndHistory() {
+        var conversation = Conversation(title: "Plugin Work", userGoal: "Build a Minecraft plugin", promptType: .auto)
+        conversation.entries.append(ConversationEntry(role: .starterPrompt, title: "Starter", text: "Plan the plugin"))
+        let attachment = FileAttachment(name: "plugin.yml", sizeBytes: 42, textPreview: "name: TestPlugin")
 
-        let guidance = PromptEngine.makeAIResponseGuidance(
+        let guidance = PromptEngine.makeGuidance(
             conversation: conversation,
-            latestAIResponse: "Here is the implementation.",
+            latestAIResponse: "I created the plugin.yml file.",
             attachments: [attachment]
         )
 
-        XCTAssertTrue(guidance.summary.contains("Config.swift"))
-        XCTAssertTrue(guidance.suggestedPrompt.contains("Attached file: Config.swift"))
-        XCTAssertTrue(guidance.fullText.contains("Recommended NovaKit response prompt"))
-    }
-
-    func testBackupRoundTripKeepsSchemaAndPreferences() throws {
-        let conversation = Conversation(title: "Backup", tags: ["ios"], folderName: "Release")
-        let backup = ConversationBackup(conversations: [conversation], promptPreferences: PromptPreferences(maxHistoryEntries: 6))
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(backup)
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let decoded = try decoder.decode(ConversationBackup.self, from: data)
-
-        XCTAssertEqual(decoded.backupVersion, ConversationBackup.currentBackupVersion)
-        XCTAssertEqual(decoded.conversations.first?.schemaVersion, Conversation.currentSchemaVersion)
-        XCTAssertEqual(decoded.conversations.first?.folderName, "Release")
-        XCTAssertEqual(decoded.promptPreferences.maxHistoryEntries, 6)
-    }
-
-    func testLegacyConversationMigrationAddsDefaults() throws {
-        let json = """
-        {
-          "id": "00000000-0000-0000-0000-000000000001",
-          "title": "Legacy",
-          "updatedAt": "2026-05-28T00:00:00Z"
-        }
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let decoded = try decoder.decode(Conversation.self, from: Data(json.utf8))
-
-        XCTAssertEqual(decoded.schemaVersion, Conversation.currentSchemaVersion)
-        XCTAssertEqual(decoded.folderName, "Inbox")
-        XCTAssertFalse(decoded.isArchived)
+        XCTAssertEqual(guidance.inferredType, .minecraftPluginPlan)
+        XCTAssertTrue(guidance.explanation.contains("plugin.yml"))
+        XCTAssertTrue(guidance.responsePrompt.contains("name: TestPlugin"))
+        XCTAssertTrue(guidance.responsePrompt.contains("Plan the plugin"))
     }
 }

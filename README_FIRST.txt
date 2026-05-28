@@ -33,6 +33,7 @@ Read these files in order:
 4. Docs/03_SIDELOADLY_PATH_DETAILED.md
 5. Docs/04_GITHUB_SECRETS_REFERENCE.md
 6. Docs/05_TROUBLESHOOTING.md
+7. Docs/07_UPDATING_THE_APP_ON_YOUR_IPHONE.md
 
 What is already included
 ------------------------
