@@ -126,7 +126,7 @@ jobs:
           shasum -a 256 certificate.p12
 
           echo "Expected local SHA256 should be:"
-          echo "7636252A1310AAD71A127D0416A7421B75D21E25D70C7142B88FD0A7AF3288B6"
+          echo "F8690AE391F33DC21E7466163C8E5B46F7A0F3FEBE7CE081BC20871ABD5FF66E"
 
           echo "Testing P12 password with OpenSSL..."
           openssl pkcs12 -info -in certificate.p12 -noout -password pass:"$P12_PASSWORD"
