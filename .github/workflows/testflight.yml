@@ -5,18 +5,29 @@ on:
 
 jobs:
   testflight:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select Xcode 26
         run: |
-          if [ -d /Applications/Xcode.app ]; then sudo xcode-select -s /Applications/Xcode.app; fi
+          set -e
+          XCODE_PATH=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort | tail -n 1)
+          if [ -z "$XCODE_PATH" ] && [ -d /Applications/Xcode.app ]; then
+            XCODE_PATH=/Applications/Xcode.app
+          fi
+          if [ -z "$XCODE_PATH" ]; then
+            echo "ERROR: Xcode 26 is required for App Store Connect uploads, but no Xcode app was found."
+            exit 1
+          fi
+          echo "Selecting $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
           xcodebuild -showsdks
+          xcodebuild -version | grep -E '^Xcode 26(\.|$)' || { echo "ERROR: App Store Connect now requires Xcode 26 / iOS 26 SDK or later."; exit 1; }
 
       - name: Run core unit tests
         run: swift test

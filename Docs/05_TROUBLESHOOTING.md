@@ -55,6 +55,20 @@ What to do:
 3. Confirm the Fastlane log prints a line like `Using CFBundleShortVersionString=1.0 and CFBundleVersion=20260528225345`.
 4. If it still fails, make sure the new `CFBundleVersion` number in the log is greater than the newest build number listed in App Store Connect -> TestFlight.
 
+
+## TestFlight upload says SDK version issue / iOS 26 SDK required
+
+This means GitHub Actions built the app with an older Xcode/iOS SDK, such as Xcode 16.4 with the iOS 18.5 SDK, and App Store Connect rejected the IPA.
+
+The TestFlight workflow now runs on `macos-26`, selects an installed `Xcode_26*.app`, prints `xcodebuild -version` and available SDKs, and fails early if Xcode 26 is not selected.
+
+What to do:
+
+1. Pull or upload the latest repo changes.
+2. Run **Build and Upload to TestFlight** again.
+3. In the **Select Xcode 26** log step, confirm it prints `Xcode 26...`.
+4. If GitHub says `macos-26` is unavailable, wait and rerun later or check GitHub-hosted runner availability.
+
 ## TestFlight build uploaded but not visible yet
 
 Wait. Apple processes builds after upload. It can take a while.
