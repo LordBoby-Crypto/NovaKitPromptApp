@@ -5,7 +5,7 @@ on:
 
 jobs:
   testflight:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
@@ -13,7 +13,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
 
       - name: Install Ruby gems
         run: bundle install
@@ -66,7 +68,7 @@ jobs:
             exit 1
           fi
 
-      - name: Apply only Bundle ID and Team ID safely
+      - name: Apply Bundle ID, Team ID, and upload-safe orientation settings
         env:
           BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -106,9 +108,21 @@ jobs:
               text
           )
 
+          text = re.sub(
+              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "[^"]*";',
+              'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";',
+              text
+          )
+
+          text = re.sub(
+              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "[^"]*";',
+              'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";',
+              text
+          )
+
           project_file.write_text(text)
 
-          print("Applied Bundle ID and Team ID only.")
+          print("Applied Bundle ID, Team ID, and full orientation support.")
           print(f"Bundle ID: {bundle_id}")
           print(f"Team ID: {team_id}")
           PY
