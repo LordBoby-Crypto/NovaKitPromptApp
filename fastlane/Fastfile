@@ -1,3 +1,5 @@
+require "shellwords"
+
 default_platform(:ios)
 
 platform :ios do
@@ -17,6 +19,18 @@ platform :ios do
       xcodeproj: "NovaKitPromptApp.xcodeproj"
     )
 
+    apple_team_id = ENV["APPLE_TEAM_ID"]
+    bundle_id = ENV["BUNDLE_ID"]
+    profile_name = ENV["PROVISIONING_PROFILE_NAME"]
+
+    xcargs = [
+      "DEVELOPMENT_TEAM=#{apple_team_id.shellescape}",
+      "PRODUCT_BUNDLE_IDENTIFIER=#{bundle_id.shellescape}",
+      "CODE_SIGN_STYLE=Manual",
+      "CODE_SIGN_IDENTITY=#{'Apple Distribution'.shellescape}",
+      "PROVISIONING_PROFILE_SPECIFIER=#{profile_name.shellescape}"
+    ].join(" ")
+
     build_app(
       scheme: "NovaKitPromptApp",
       project: "./NovaKitPromptApp.xcodeproj",
@@ -24,19 +38,13 @@ platform :ios do
       output_directory: "build",
       output_name: "NovaKitPromptApp",
       clean: true,
-      xcargs: [
-        "DEVELOPMENT_TEAM=#{ENV["APPLE_TEAM_ID"]}",
-        "PRODUCT_BUNDLE_IDENTIFIER=#{ENV["BUNDLE_ID"]}",
-        "CODE_SIGN_STYLE=Manual",
-        "CODE_SIGN_IDENTITY=Apple\\ Distribution",
-        "PROVISIONING_PROFILE_SPECIFIER=#{ENV["PROVISIONING_PROFILE_NAME"]}"
-      ].join(" "),
+      xcargs: xcargs,
       export_options: {
         method: "app-store",
         signingStyle: "manual",
-        teamID: ENV["APPLE_TEAM_ID"],
+        teamID: apple_team_id,
         provisioningProfiles: {
-          ENV["BUNDLE_ID"] => ENV["PROVISIONING_PROFILE_NAME"]
+          bundle_id => profile_name
         }
       }
     )
