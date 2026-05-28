@@ -66,39 +66,64 @@ jobs:
             exit 1
           fi
 
-      - name: Apply Bundle ID and Team ID to Xcode project
+      - name: Apply Bundle ID and Team ID safely to Xcode project
         env:
           BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -e
+
           python3 - <<'PY'
           from pathlib import Path
           import os
           import re
+          import sys
 
           project_file = Path("NovaKitPromptApp.xcodeproj/project.pbxproj")
+
+          if not project_file.exists():
+              print("ERROR: Could not find NovaKitPromptApp.xcodeproj/project.pbxproj")
+              sys.exit(1)
+
           text = project_file.read_text()
 
-          bundle_id = os.environ["BUNDLE_ID"]
-          team_id = os.environ["APPLE_TEAM_ID"]
+          bundle_id = os.environ["BUNDLE_ID"].strip()
+          team_id = os.environ["APPLE_TEAM_ID"].strip()
+
+          if not bundle_id:
+              print("ERROR: BUNDLE_ID is empty")
+              sys.exit(1)
+
+          if not team_id:
+              print("ERROR: APPLE_TEAM_ID is empty")
+              sys.exit(1)
+
+          def pbx_quote(value: str) -> str:
+              value = value.replace("\\", "\\\\").replace('"', '\\"')
+              return f'"{value}"'
 
           text = re.sub(
-              r"PRODUCT_BUNDLE_IDENTIFIER = [^;]+;",
-              f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};",
+              r'PRODUCT_BUNDLE_IDENTIFIER = [^;]+;',
+              f'PRODUCT_BUNDLE_IDENTIFIER = {pbx_quote(bundle_id)};',
               text
           )
 
           text = re.sub(
-              r"DEVELOPMENT_TEAM = [^;]*;",
-              f"DEVELOPMENT_TEAM = {team_id};",
+              r'DEVELOPMENT_TEAM = [^;]*;',
+              f'DEVELOPMENT_TEAM = {pbx_quote(team_id)};',
               text
           )
 
           project_file.write_text(text)
-          print(f"Applied Bundle ID: {bundle_id}")
-          print(f"Applied Apple Team ID: {team_id}")
+
+          print("Applied Bundle ID safely.")
+          print("Applied Apple Team ID safely.")
           PY
+
+      - name: Verify Xcode project can be read
+        run: |
+          set -e
+          xcodebuild -list -project NovaKitPromptApp.xcodeproj
 
       - name: Create temporary keychain
         env:
@@ -124,9 +149,6 @@ jobs:
 
           echo "Decoded certificate SHA256:"
           shasum -a 256 certificate.p12
-
-          echo "Expected local SHA256 should be:"
-          echo "F8690AE391F33DC21E7466163C8E5B46F7A0F3FEBE7CE081BC20871ABD5FF66E"
 
           echo "Testing P12 password with OpenSSL..."
           openssl pkcs12 -info -in certificate.p12 -noout -password pass:"$P12_PASSWORD"
