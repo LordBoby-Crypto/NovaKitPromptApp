@@ -1,0 +1,50 @@
+name: Build Unsigned IPA Artifact for Windows Sideloading
+
+on:
+  workflow_dispatch:
+
+jobs:
+  unsigned-ipa:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build unsigned device app
+        run: |
+          set -e
+          xcodebuild \
+            -project NovaKitPromptApp.xcodeproj \
+            -scheme NovaKitPromptApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -e
+          APP_PATH=$(find build/DerivedData -path "*/Release-iphoneos/*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Could not find built .app"
+            exit 1
+          fi
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          cd build
+          zip -qry NovaKitPromptApp-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaKitPromptApp-unsigned-IPA
+          path: build/NovaKitPromptApp-unsigned.ipa
