@@ -17,6 +17,7 @@ final class AppStore: ObservableObject {
     private let legacyStorageKey = "NovaKitPromptApp.conversations.v1"
 
     init() {
+        loadPreferences()
         load()
         if conversations.isEmpty { createConversation() }
         selectedID = visibleConversations.first?.id ?? conversations.first?.id
@@ -28,8 +29,8 @@ final class AppStore: ObservableObject {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    func createConversation() {
-        let c = Conversation(title: "New NovaKit Conversation")
+    func createConversation(folderName: String = "Inbox") {
+        let c = Conversation(title: "New NovaKit Conversation", folderName: folderName)
         conversations.insert(c, at: 0)
         selectedID = c.id
     }
@@ -40,6 +41,16 @@ final class AppStore: ObservableObject {
         copy.title += " Copy"
         copy.createdAt = Date()
         copy.updatedAt = Date()
+        copy.entries = copy.entries.map { entry in
+            var copiedEntry = entry
+            copiedEntry.id = UUID()
+            copiedEntry.attachments = copiedEntry.attachments.map { attachment in
+                var copiedAttachment = attachment
+                copiedAttachment.id = UUID()
+                return copiedAttachment
+            }
+            return copiedEntry
+        }
         conversations.insert(copy, at: 0)
         selectedID = copy.id
     }

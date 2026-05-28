@@ -5,6 +5,7 @@ import UIKit
 #endif
 
 struct ConversationView: View {
+    @EnvironmentObject var store: AppStore
     @Binding var conversation: Conversation
     @State private var aiResponse = ""
     @State private var nextInstruction = ""
@@ -13,7 +14,7 @@ struct ConversationView: View {
     @State private var showingStarter = false
     @State private var showingSettings = false
     @State private var fileError: String?
-    @State private var copiedMessage: String?
+    @State private var toastMessage: String?
 
     var body: some View {
         ZStack {
@@ -45,6 +46,7 @@ struct ConversationView: View {
                         }
                     }
                 }
+                .accessibilityLabel("Attach files")
 
                 ComposerView(
                     aiResponse: $aiResponse,
@@ -76,6 +78,10 @@ struct ConversationView: View {
                 fileError = error.localizedDescription
                 Haptics.error()
             }
+            .padding()
+            .navigationTitle("Starter")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showingStarterSheet = false } } }
         }
         .alert("File problem", isPresented: Binding(get: { fileError != nil }, set: { if !$0 { fileError = nil } })) {
             Button("OK", role: .cancel) { fileError = nil }
@@ -150,10 +156,31 @@ struct ConversationView: View {
         Haptics.success()
     }
 
-    private func saveEntry(role: ConversationEntry.Role, title: String, text: String, attachments: [FileAttachment]) {
+    private var canSubmit: Bool {
+        !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingAttachments.isEmpty
+    }
+
+    private func submitAIResponse() {
+        let clean = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = pendingAttachments
+        saveEntry(role: .aiResponse, title: "AI Response", text: clean.isEmpty ? "[No pasted text; files only.]" : clean, attachments: attachments)
+
+        var prompt = PromptEngine.makeFollowUp(conversation: conversation, newInstruction: optionalInstruction, latestAIResponse: clean, attachments: attachments, preferences: store.preferences)
+        let guidance = PromptEngine.makeAIResponseGuidance(conversation: conversation, latestAIResponse: clean, attachments: attachments, preferences: store.preferences)
+        if !optionalInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { prompt = PromptEngine.makeFollowUp(conversation: conversation, newInstruction: optionalInstruction, latestAIResponse: clean, attachments: attachments, preferences: store.preferences) }
+
+        saveEntry(role: .novaGuidance, title: "NovaKit Guidance", text: guidance.fullText, attachments: attachments, suggestedPrompt: prompt, summary: guidance.summary)
+        composerText = ""
+        optionalInstruction = ""
+        showingOptionalInstruction = false
+        pendingAttachments = []
+        showToast("Guidance generated")
+    }
+
+    private func saveEntry(role: ConversationEntry.Role, title: String, text: String, attachments: [FileAttachment], suggestedPrompt: String? = nil, summary: String? = nil) {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
-        conversation.entries.append(ConversationEntry(role: role, title: title, text: clean, attachments: attachments))
+        conversation.entries.append(ConversationEntry(role: role, title: title, text: clean, attachments: attachments, suggestedPrompt: suggestedPrompt, summary: summary))
         conversation.updatedAt = Date()
     }
 
@@ -421,5 +448,10 @@ struct FlowTags: View {
                     .background(Color.blue.opacity(0.18), in: Capsule())
             }
         }
+    }
+
+    private func applyTags() {
+        conversation.tags = tagsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.sorted()
+        conversation.updatedAt = Date()
     }
 }

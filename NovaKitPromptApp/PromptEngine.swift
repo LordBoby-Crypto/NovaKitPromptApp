@@ -173,7 +173,7 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
         let responsePrompt = """
         Run NovaKit v3.1 as Nova.
 
-        Continue the same work thread. Use the prior prompt history, the AI response I pasted, and the attached file contents together. Do not ignore attached files.
+Continue this exact work thread using the pasted AI response and attached file context below. First explain what the AI response and files mean in practical terms, then produce the best next response or implementation step.
 
         \(utilities)
 
@@ -183,14 +183,14 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
         # Conversation goal
         \(cleaned(conversation.userGoal, fallback: conversation.title))
 
-        # Recent saved prompt/history context
-        \(previousPrompts.isEmpty ? "No previous prompt history was saved." : previousPrompts)
+# Recent saved history
+\(recentContext.isEmpty ? "No prior saved history." : recentContext)
 
         # AI response I received
         \(cleanResponse)
 
-        # Files produced by the AI / attached for this step
-        \(attachmentBlock)
+# Attached files and captured content
+\(attachmentSummary.promptBlock)
 
         # Required behavior
         - Explain what changed and what the attached files appear to mean.
@@ -215,6 +215,9 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
         if lower.contains("attach") || lower.contains("file") || lower.contains("explain") { return .fileExplanation }
         if lower.contains("bug") || lower.contains("error") || lower.contains("crash") || lower.contains("fix") { return .bugFix }
         if lower.contains("review") || lower.contains("check") { return .codeReview }
+        if lower.contains("research") || lower.contains("source") || lower.contains("investigate") { return .researchBrief }
+        if lower.contains("ios") || lower.contains("app") || lower.contains("ui") || lower.contains("testflight") || lower.contains("upgrade") { return .appUpgrade }
+        if lower.contains("plan") || lower.contains("roadmap") || lower.contains("project") { return .projectPlan }
         if lower.contains("add") || lower.contains("feature") || lower.contains("expand") { return .featureExpansion }
         return .general
     }

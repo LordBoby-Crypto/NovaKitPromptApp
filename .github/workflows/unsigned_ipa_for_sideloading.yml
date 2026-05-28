@@ -64,4 +64,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NovaKitPromptApp-unsigned-IPA
-          path: build/NovaKitPromptApp-unsigned.ipa
+          path: |
+            build/NovaKitPromptApp-unsigned.ipa
+            build_settings.txt

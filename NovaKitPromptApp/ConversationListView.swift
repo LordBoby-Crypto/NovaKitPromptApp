@@ -7,7 +7,9 @@ import UIKit
 struct ConversationListView: View {
     @EnvironmentObject var store: AppStore
     @State private var showingImport = false
+    @State private var showingArchived = false
     @State private var importError: String?
+    @State private var searchText = ""
 
     var body: some View {
         NavigationStack {
@@ -57,7 +59,7 @@ struct ConversationListView: View {
                 if let binding = bindingForConversation(id) {
                     ConversationView(conversation: binding)
                 } else {
-                    Text("Conversation not found")
+                    MissingConversationView()
                 }
             }
             .fileImporter(isPresented: $showingImport, allowedContentTypes: [.json, .text], allowsMultipleSelection: false) { result in

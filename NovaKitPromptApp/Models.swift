@@ -6,6 +6,14 @@ struct FileAttachment: Identifiable, Codable, Equatable {
     var sizeBytes: Int
     var textPreview: String
     var capturedAt = Date()
+
+    var fileExtension: String {
+        URL(fileURLWithPath: name).pathExtension.lowercased()
+    }
+
+    var isLikelyText: Bool {
+        !textPreview.hasPrefix("[Binary or unsupported text encoding")
+    }
 }
 
 struct ConversationEntry: Identifiable, Codable, Equatable {
@@ -22,6 +30,9 @@ struct ConversationEntry: Identifiable, Codable, Equatable {
     var text: String
     var attachments: [FileAttachment] = []
     var createdAt = Date()
+
+    var suggestedPrompt: String?
+    var summary: String?
 }
 
 struct ConversationFolder: Identifiable, Codable, Equatable, Hashable {
@@ -44,6 +55,8 @@ struct PromptTemplateConfig: Codable, Equatable {
 }
 
 struct Conversation: Identifiable, Codable, Equatable {
+    static let currentSchemaVersion = 2
+
     var id = UUID()
     var schemaVersion: Int = 2
     var title: String
@@ -124,4 +137,37 @@ enum PromptType: String, CaseIterable, Identifiable, Codable {
     case general = "General NovaKit Prompt"
 
     var id: String { rawValue }
+}
+
+struct PromptTemplate: Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+    var type: PromptType
+    var instructions: String
+
+    static let builtIns: [PromptTemplate] = [
+        PromptTemplate(id: "novakit-general", name: "NovaKit General", type: .general, instructions: "Use the strongest fitting NovaKit utility and produce a practical answer."),
+        PromptTemplate(id: "app-upgrade", name: "App Upgrade", type: .appUpgrade, instructions: "Use product design, implementation planning, testing, release, and update-risk checks."),
+        PromptTemplate(id: "minecraft-plan", name: "Minecraft Plugin", type: .minecraftPluginPlan, instructions: "Prefer Paper API, Java 21, Maven, Lombok, and Oraxen-aware design when relevant."),
+        PromptTemplate(id: "bug-fix", name: "Bug Fix", type: .bugFix, instructions: "Focus on reproduction, root causes, evidence, exact fixes, and verification."),
+        PromptTemplate(id: "code-review", name: "Code Review", type: .codeReview, instructions: "Use hard-nosed realism and Response Reviewer before final output.")
+    ]
+}
+
+struct PromptPreferences: Codable, Equatable {
+    var preferredTemplateID: String = PromptTemplate.builtIns.first?.id ?? "novakit-general"
+    var includeAttachmentAnalysis: Bool = true
+    var includeStepByStepPlan: Bool = true
+    var includeCopyReadyPrompt: Bool = true
+    var maxHistoryEntries: Int = 10
+}
+
+struct ConversationBackup: Codable, Equatable {
+    static let currentBackupVersion = 2
+
+    var backupVersion: Int = ConversationBackup.currentBackupVersion
+    var exportedAt: Date = Date()
+    var appName: String = "NovaKit Prompt App"
+    var conversations: [Conversation]
+    var promptPreferences: PromptPreferences = PromptPreferences()
 }
