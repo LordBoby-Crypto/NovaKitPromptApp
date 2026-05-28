@@ -1,0 +1,5 @@
+Suggested privacy statement:
+
+NovaKit Prompt App stores conversation and prompt data locally on the user's device. The app does not require account login and does not send user content to a server. Exported backup files are created only when the user chooses to export them.
+
+If you modify the app to add cloud sync, analytics, ads, crash reporting, or AI API calls, update this privacy text and App Store privacy answers.

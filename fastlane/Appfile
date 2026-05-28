@@ -1,0 +1,4 @@
+app_identifier(ENV.fetch("BUNDLE_ID", "com.yourname.novakitpromptapp"))
+apple_id(ENV.fetch("APPLE_ID_EMAIL", "your-apple-id@example.com"))
+itc_team_id(ENV.fetch("APP_STORE_CONNECT_TEAM_ID", ""))
+team_id(ENV.fetch("APPLE_TEAM_ID", ""))
