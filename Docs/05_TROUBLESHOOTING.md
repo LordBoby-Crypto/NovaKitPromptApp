@@ -41,6 +41,20 @@ Most likely causes:
 - `ASC_PRIVATE_KEY` missing BEGIN/END PRIVATE KEY lines.
 - API key lacks App Manager/Admin access.
 
+
+## TestFlight upload says bundle version must be higher than previously uploaded version
+
+This means App Store Connect received an IPA whose `CFBundleVersion` was not higher than the previous uploaded build.
+
+The TestFlight workflow now avoids `agvtool` and writes a UTC timestamp build number directly into `NovaKitPromptApp/Info.plist` before Fastlane builds the IPA.
+
+What to do:
+
+1. Pull or upload the latest repo changes.
+2. Run **Build and Upload to TestFlight** again.
+3. Confirm the Fastlane log prints a line like `Using CFBundleShortVersionString=1.0 and CFBundleVersion=20260528225345`.
+4. If it still fails, make sure the new `CFBundleVersion` number in the log is greater than the newest build number listed in App Store Connect -> TestFlight.
+
 ## TestFlight build uploaded but not visible yet
 
 Wait. Apple processes builds after upload. It can take a while.

@@ -9,7 +9,9 @@ What it does:
 - Lets you attach files created by the AI.
 - Uses the pasted response plus attached file text when creating the next follow-up prompt.
 - Stores data locally on the iPhone using app storage.
-- Can export/import conversation backups as JSON.
+- Can export/import versioned conversation backups as JSON.
+- Uses a cleaner chat-style workflow for starter prompts, AI replies, attached files, and generated NovaKit response prompts.
+- Supports tags, archived conversations, richer prompt modes, configurable prompt-template behavior, copy feedback, sharing, attachment previews, and haptics.
 
 How to install on iPhone with Xcode:
 1. Use a Mac with Xcode installed.
@@ -34,3 +36,4 @@ Notes:
 - The app is fully offline.
 - It does not call any AI service itself.
 - It creates prompts for you to paste into your NovaKit v3.1 AI.
+- To update an already installed iPhone copy, keep the same Bundle ID and rerun the TestFlight or Sideloadly workflow described in Docs/07_UPDATING_THE_APP_ON_YOUR_IPHONE.md.
