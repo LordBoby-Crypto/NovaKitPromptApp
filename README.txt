@@ -4,12 +4,12 @@ This is a real native iOS SwiftUI app project, not a webpage/PWA.
 
 What it does:
 - Creates NovaKit v3.1 starter prompts.
-- Saves multiple conversations.
-- Lets you paste AI/Nova responses.
-- Lets you attach files created by the AI.
-- Uses the pasted response plus attached file text when creating the next follow-up prompt.
+- Uses a chat-style thread instead of one crowded prompt-builder page.
+- Lets you paste each AI/Nova response at the bottom of the thread and attach files created by the AI.
+- Generates a NovaKit guidance message that explains the response/files and gives a copy-ready next prompt.
+- Saves multiple conversations with folders, tags, and archive support.
 - Stores data locally on the iPhone using app storage.
-- Can export/import conversation backups as JSON.
+- Can export/import versioned conversation backups as JSON.
 
 How to install on iPhone with Xcode:
 1. Use a Mac with Xcode installed.
@@ -34,3 +34,4 @@ Notes:
 - The app is fully offline.
 - It does not call any AI service itself.
 - It creates prompts for you to paste into your NovaKit v3.1 AI.
+- To update an already-installed iPhone app, keep the same Bundle ID and upload/install a newer build through TestFlight or your sideloading workflow.

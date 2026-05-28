@@ -5,15 +5,24 @@ on:
 
 jobs:
   unsigned-ipa:
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 45
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Select Xcode and print diagnostics
+        run: |
+          set -e
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Print project build settings
+        run: |
+          set -e
+          xcodebuild -project NovaKitPromptApp.xcodeproj -scheme NovaKitPromptApp -showBuildSettings | tee build_settings.txt
 
       - name: Build unsigned device app
         run: |
@@ -47,4 +56,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NovaKitPromptApp-unsigned-IPA
-          path: build/NovaKitPromptApp-unsigned.ipa
+          path: |
+            build/NovaKitPromptApp-unsigned.ipa
+            build_settings.txt
