@@ -1,0 +1,11 @@
+NovaKit Prompt App is a private prompt workflow helper for NovaKit v3.1 users.
+
+It helps you:
+- Start a new NovaKit-style prompt from a plain-language request.
+- Save multiple prompt conversations.
+- Paste AI/Nova responses back into the app.
+- Attach text/code/config files made by the AI.
+- Generate follow-up prompts based on the saved conversation and attached file text.
+- Export/import conversation backups.
+
+This app does not include an AI model and does not contact an external AI service. It is a local prompt organizer/generator.
