@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
 
-      - name: Apply Bundle ID, Team ID, and upload-safe orientation settings
+      - name: Apply Bundle ID, Team ID, and iPhone-only upload settings
         env:
           BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -96,33 +96,41 @@ jobs:
               value = value.replace("\\", "\\\\").replace('"', '\\"')
               return f'"{value}"'
 
-          text = re.sub(
-              r'PRODUCT_BUNDLE_IDENTIFIER = [^;]+;',
-              f'PRODUCT_BUNDLE_IDENTIFIER = {pbx_quote(bundle_id)};',
-              text
+          def set_build_setting(text: str, key: str, value: str) -> str:
+              pattern = rf'{re.escape(key)} = [^;]+;'
+              replacement = f'{key} = {value};'
+              if re.search(pattern, text):
+                  return re.sub(pattern, replacement, text)
+              return text.replace(
+                  "SWIFT_VERSION = 5.0;",
+                  f"SWIFT_VERSION = 5.0;\n\t\t\t\t{replacement}"
+              )
+
+          text = set_build_setting(text, "PRODUCT_BUNDLE_IDENTIFIER", pbx_quote(bundle_id))
+          text = set_build_setting(text, "DEVELOPMENT_TEAM", pbx_quote(team_id))
+
+          # Make the app iPhone-only so App Store Connect does not require iPad multitasking orientation support.
+          text = set_build_setting(text, "TARGETED_DEVICE_FAMILY", "1")
+
+          # Also mark the app as requiring full screen. This removes the iPad multitasking orientation requirement.
+          text = set_build_setting(text, "INFOPLIST_KEY_UIRequiresFullScreen", "YES")
+
+          # Keep all orientations available in generated Info.plist to satisfy validation if the app is ever treated as universal.
+          text = set_build_setting(
+              text,
+              "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone",
+              pbx_quote("UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight")
           )
 
-          text = re.sub(
-              r'DEVELOPMENT_TEAM = [^;]*;',
-              f'DEVELOPMENT_TEAM = {pbx_quote(team_id)};',
-              text
-          )
-
-          text = re.sub(
-              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "[^"]*";',
-              'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";',
-              text
-          )
-
-          text = re.sub(
-              r'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "[^"]*";',
-              'INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";',
-              text
+          text = set_build_setting(
+              text,
+              "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad",
+              pbx_quote("UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight")
           )
 
           project_file.write_text(text)
 
-          print("Applied Bundle ID, Team ID, and full orientation support.")
+          print("Applied Bundle ID, Team ID, iPhone-only target, full-screen setting, and full orientation support.")
           print(f"Bundle ID: {bundle_id}")
           print(f"Team ID: {team_id}")
           PY
