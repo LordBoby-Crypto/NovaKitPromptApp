@@ -221,10 +221,21 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
     static func inferType(from text: String) -> PromptType {
         let lower = text.lowercased()
         if lower.contains("testflight") || lower.contains("app store") || lower.contains("fastlane") || lower.contains("signing") { return .appStorePrep }
-        if lower.contains("ios") || lower.contains("app") || lower.contains("ui") { return .appUpgrade }
+        if lower.contains("minecraft") || lower.contains("paper plugin") || containsWholeWord(lower, "plugin") { return .minecraftPluginPlan }
         if lower.contains("release") || lower.contains("update") || lower.contains("upgrade") || lower.contains("version") { return .releasePlan }
         if lower.contains("architecture") || lower.contains("data model") || lower.contains("schema") || lower.contains("migration") { return .architecturePlan }
-        if lower.contains("minecraft") || lower.contains("paper plugin") || lower.contains("plugin") { return .minecraftPluginPlan }
+        if lower.contains("swiftui")
+            || lower.contains("layout")
+            || lower.contains("screen")
+            || lower.contains("iphone")
+            || lower.contains("ipad")
+            || lower.contains("user interface")
+            || containsWholeWord(lower, "ios")
+            || containsWholeWord(lower, "app")
+            || containsWholeWord(lower, "ui")
+            || containsWholeWord(lower, "ux") {
+            return .appUpgrade
+        }
         if lower.contains("attach") || lower.contains("file") || lower.contains("explain") { return .fileExplanation }
         if lower.contains("bug") || lower.contains("error") || lower.contains("crash") || lower.contains("fix") { return .bugFix }
         if lower.contains("review") || lower.contains("check") { return .codeReview }
@@ -287,5 +298,10 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
     private static func truncate(_ text: String, max: Int) -> String {
         guard text.count > max else { return text }
         return String(text.prefix(max)) + "\n...[truncated]"
+    }
+
+    private static func containsWholeWord(_ text: String, _ word: String) -> Bool {
+        let pattern = "\\b" + NSRegularExpression.escapedPattern(for: word) + "\\b"
+        return text.range(of: pattern, options: .regularExpression) != nil
     }
 }
