@@ -174,6 +174,26 @@ struct ConversationCard: View {
     }
 }
 
+struct MissingConversationView: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.bubble")
+                .font(.system(size: 42))
+                .foregroundStyle(.orange)
+            Text("Conversation not found")
+                .font(.title3.bold())
+            Text("This thread may have been deleted or changed while you were navigating.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(20)
+    }
+}
+
 enum Haptics {
     static func tap() {
 #if canImport(UIKit)

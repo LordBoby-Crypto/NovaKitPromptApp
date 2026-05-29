@@ -24,4 +24,11 @@ final class PromptEngineTests: XCTestCase {
         XCTAssertTrue(guidance.responsePrompt.contains("name: TestPlugin"))
         XCTAssertTrue(guidance.responsePrompt.contains("Plan the plugin"))
     }
+
+    func testBuildWordDoesNotTripAppUpgradeHeuristic() {
+        XCTAssertEqual(
+            PromptEngine.inferType(from: "Build a Minecraft plugin"),
+            .minecraftPluginPlan
+        )
+    }
 }
