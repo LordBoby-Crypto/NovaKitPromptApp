@@ -131,6 +131,7 @@ enum PromptType: String, CaseIterable, Identifiable, Codable {
     case featureExpansion = "Feature Expansion"
     case bugFix = "Bug Fix Plan"
     case releasePlan = "Release / Update Plan"
+    case appUpgrade = "App Upgrade / UX Refresh"
     case appStorePrep = "App Store / TestFlight Prep"
     case architecturePlan = "Architecture Plan"
     case fileExplanation = "Explain AI Files"
