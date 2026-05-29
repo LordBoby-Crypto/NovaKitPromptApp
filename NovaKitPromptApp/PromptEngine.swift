@@ -95,6 +95,18 @@ Create an update/release plan for:
 
 Include versioning, migration risks, build commands, signing/distribution steps, rollback plan, user-facing release notes, and post-release checks.
 """
+        case .appUpgrade:
+            return baseHeader(task: cleanGoal, config: config) + """
+
+Run NovaKit v3.1 as Nova.
+
+\(utilities)
+
+Plan a practical app upgrade for:
+\(cleanGoal)
+
+Return a clean upgrade brief with UX improvements, screen flow, data model impact, migration considerations, testing strategy, build/update risks, and the safest implementation order.
+"""
         case .appStorePrep:
             return baseHeader(task: cleanGoal, config: config) + """
 
@@ -184,13 +196,13 @@ Continue this exact work thread using the pasted AI response and attached file c
         \(cleaned(conversation.userGoal, fallback: conversation.title))
 
 # Recent saved history
-\(recentContext.isEmpty ? "No prior saved history." : recentContext)
+\(previousPrompts.isEmpty ? "No prior saved history." : previousPrompts)
 
         # AI response I received
         \(cleanResponse)
 
 # Attached files and captured content
-\(attachmentSummary.promptBlock)
+\(attachmentBlock)
 
         # Required behavior
         - Explain what changed and what the attached files appear to mean.
@@ -209,15 +221,15 @@ Continue this exact work thread using the pasted AI response and attached file c
     static func inferType(from text: String) -> PromptType {
         let lower = text.lowercased()
         if lower.contains("testflight") || lower.contains("app store") || lower.contains("fastlane") || lower.contains("signing") { return .appStorePrep }
+        if lower.contains("ios") || lower.contains("app") || lower.contains("ui") { return .appUpgrade }
         if lower.contains("release") || lower.contains("update") || lower.contains("upgrade") || lower.contains("version") { return .releasePlan }
         if lower.contains("architecture") || lower.contains("data model") || lower.contains("schema") || lower.contains("migration") { return .architecturePlan }
         if lower.contains("minecraft") || lower.contains("paper plugin") || lower.contains("plugin") { return .minecraftPluginPlan }
         if lower.contains("attach") || lower.contains("file") || lower.contains("explain") { return .fileExplanation }
         if lower.contains("bug") || lower.contains("error") || lower.contains("crash") || lower.contains("fix") { return .bugFix }
         if lower.contains("review") || lower.contains("check") { return .codeReview }
-        if lower.contains("research") || lower.contains("source") || lower.contains("investigate") { return .researchBrief }
-        if lower.contains("ios") || lower.contains("app") || lower.contains("ui") || lower.contains("testflight") || lower.contains("upgrade") { return .appUpgrade }
-        if lower.contains("plan") || lower.contains("roadmap") || lower.contains("project") { return .projectPlan }
+        if lower.contains("research") || lower.contains("source") || lower.contains("investigate") { return .codeReview }
+        if lower.contains("plan") || lower.contains("roadmap") || lower.contains("project") { return .architecturePlan }
         if lower.contains("add") || lower.contains("feature") || lower.contains("expand") { return .featureExpansion }
         return .general
     }

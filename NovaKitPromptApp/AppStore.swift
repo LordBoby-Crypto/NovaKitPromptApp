@@ -114,4 +114,9 @@ final class AppStore: ObservableObject {
         let text = BackupCodec.export(conversations: conversations, folders: folders)
         UserDefaults.standard.set(text, forKey: storageKey)
     }
+
+    private func loadPreferences() {
+        // Template settings now live on each conversation, but we keep this hook
+        // so older startup paths remain valid during the storage transition.
+    }
 }
