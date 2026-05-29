@@ -185,7 +185,7 @@ Use the relevant NovaKit v3.1 utility or mode, explain which one you used briefl
         let responsePrompt = """
         Run NovaKit v3.1 as Nova.
 
-Continue this exact work thread using the pasted AI response and attached file context below. First explain what the AI response and files mean in practical terms, then produce the best next response or implementation step.
+        Continue this exact work thread using the pasted AI response and attached file context below. First explain what the AI response and files mean in practical terms, then produce the best next response or implementation step.
 
         \(utilities)
 
@@ -195,14 +195,14 @@ Continue this exact work thread using the pasted AI response and attached file c
         # Conversation goal
         \(cleaned(conversation.userGoal, fallback: conversation.title))
 
-# Recent saved history
-\(previousPrompts.isEmpty ? "No prior saved history." : previousPrompts)
+        # Recent saved history
+        \(previousPrompts.isEmpty ? "No prior saved history." : previousPrompts)
 
         # AI response I received
         \(cleanResponse)
 
-# Attached files and captured content
-\(attachmentBlock)
+        # Attached files and captured content
+        \(attachmentBlock)
 
         # Required behavior
         - Explain what changed and what the attached files appear to mean.
